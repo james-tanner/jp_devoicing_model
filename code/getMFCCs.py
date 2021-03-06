@@ -15,8 +15,9 @@ parser.add_argument('soundFiles', help = "Path to the CSJ soundfiles")
 parser.add_argument('outputCSV', help = "Path to location for writing new CSV")
 args = parser.parse_args()
 
-## use '|' separator, default in SQLite
-df = pd.read_csv(args.inputCSV, sep = "|")
+df = pd.read_csv(args.inputCSV, sep = ",")
+
+print("Dataset properties:\nRows:\t{}\nColumns:\t{}".format(len(df), len(df.columns)))
 
 ## Convert preceding consonant into voiced/voiceless categories
 def GetPrevVoicing(x):
@@ -52,6 +53,11 @@ df['ObsID'] = df['TalkID'] + "_" + df['PhonemeID']
 df['PrevVoicing'] = GetPrevVoicing(df['PrevPhoneme'].values)
 df['FollowingVoicing'] = GetFollowingVoicing(df['FollowingMora'].values)
 
+## declare empty MFCC columns
+df['mfcc'] = np.nan
+df['mfcc_shape'] = np.nan
+df['mfcc_dur'] = np.nan
+
 print("Measuring {} tokens across {} files".format(len(df), len(df['TalkID'].unique())))
 
 ## Start looping through audio files in the csv
@@ -62,8 +68,26 @@ for count, audio in enumerate(set(df.TalkID)):
 		sound = parselmouth.Sound(os.path.join(args.soundFiles, audio + ".wav"))
 		print("Processing {} ({}/{})".format(audio, count + 1, len(set(df.TalkID))))
 
-		mfcc_object = sound.to_mfcc(number_of_coefficients=12)
-		mfccs = mfcc_object.extract_features()
-		mfcc_arr = mfcc.to_array()
+		## iterate through rows for that audio file
+		for index, row in df.iterrows():
+			if row["TalkID"] == audio:
 
-		print(mfcc_aff.shape)
+				## extract each vowel and calculate MFCCs for them
+				vowel = sound.extract_part(from_time = row['PhonemeStart'],
+					                       to_time = row['PhonemeEnd'])
+				mfcc_object = vowel.to_mfcc(number_of_coefficients=12)
+				mfcc_arr = mfcc_object.to_array()
+				
+				## add the MFCCs and the shape to columns
+				df.loc[index, 'mfcc'] = mfcc_arr
+				df.loc[index, 'mfcc_shape'] = mfcc_arr.shape
+				df.loc[index, 'mfcc_dur'] = mfcc_object.duration
+			else:
+				continue
+	## Skip files that can't be found
+	except parselmouth.PraatError as e:
+		pass
+
+## Write to CSV
+df.to_csv(args.outputCSV, encoding = "UTF-16")
+print("Done!")
