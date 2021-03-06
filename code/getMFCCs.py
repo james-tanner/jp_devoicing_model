@@ -17,7 +17,7 @@ args = parser.parse_args()
 
 df = pd.read_csv(args.inputCSV, sep = ",")
 
-print("Dataset properties:\nRows:\t{}\nColumns:\t{}".format(len(df), len(df.columns)))
+print("Dataset properties:\t{} rows and {} columns".format(len(df), len(df.columns)))
 
 ## Convert preceding consonant into voiced/voiceless categories
 def GetPrevVoicing(x):
@@ -54,8 +54,10 @@ df['PrevVoicing'] = GetPrevVoicing(df['PrevPhoneme'].values)
 df['FollowingVoicing'] = GetFollowingVoicing(df['FollowingMora'].values)
 
 ## declare empty MFCC columns
-df['mfcc'] = np.nan
-df['mfcc_shape'] = np.nan
+df['mfcc'] = df.apply(lambda x : np.ndarray, axis=1)
+
+## MFCC meta-columns
+df['mfcc_shape'] = df.apply(lambda x : (), axis=1)
 df['mfcc_dur'] = np.nan
 
 print("Measuring {} tokens across {} files".format(len(df), len(df['TalkID'].unique())))
@@ -78,9 +80,11 @@ for count, audio in enumerate(set(df.TalkID)):
 				mfcc_object = vowel.to_mfcc(number_of_coefficients=12)
 				mfcc_arr = mfcc_object.to_array()
 				
+				print("Token {}: {}".format(row['ObsID'], mfcc_arr.shape))
 				## add the MFCCs and the shape to columns
-				df.loc[index, 'mfcc'] = mfcc_arr
-				df.loc[index, 'mfcc_shape'] = mfcc_arr.shape
+				df.at[index, 'mfcc'] = mfcc_arr
+
+				df.at[index, 'mfcc_shape'] = mfcc_arr.shape
 				df.loc[index, 'mfcc_dur'] = mfcc_object.duration
 			else:
 				continue
