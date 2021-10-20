@@ -62,6 +62,7 @@ df['mfcc_dur'] = np.nan
 
 print("Measuring {} tokens across {} files".format(len(df), len(df['TalkID'].unique())))
 
+phone_list = []
 ## Start looping through audio files in the csv
 for count, audio in enumerate(set(df.TalkID)):
 
@@ -75,17 +76,28 @@ for count, audio in enumerate(set(df.TalkID)):
 			if row["TalkID"] == audio:
 
 				## extract each vowel and calculate MFCCs for them
-				vowel = sound.extract_part(from_time = row['PhonemeStart'],
-					                       to_time = row['PhonemeEnd'])
+				vowel = sound.extract_part(from_time = row['PhonemeStart'], to_time = row['PhonemeEnd'])
 				mfcc_object = vowel.to_mfcc(number_of_coefficients=12)
 				mfcc_arr = mfcc_object.to_array()
 				
 				print("Token {}: {}".format(row['ObsID'], mfcc_arr.shape))
 				## add the MFCCs and the shape to columns
-				df.at[index, 'mfcc'] = mfcc_arr
 
-				df.at[index, 'mfcc_shape'] = mfcc_arr.shape
-				df.loc[index, 'mfcc_dur'] = mfcc_object.duration
+				## MFCC array is in a (coeff, step) shape; write new
+				## row for each timestep and add MFCC properties
+				for tstep in range(0, mfcc_arr.shape[1]):
+					temp = pd.DataFrame()
+					temp.loc[tstep, 'ObsID'] = row['ObsID']
+					temp.loc[tstep, 'mfcc_nsteps'] = mfcc_arr.shape[1]
+					temp.loc[tstep, 'mfcc_dur'] = mfcc_object.duration
+
+					## add each coefficient for that timestep
+					for i, coeff in enumerate(mfcc_arr[:,tstep]):
+						temp.loc[tstep, 'mfcc_timestep'] = tstep
+						temp.loc[tstep, f'mfcc_coeff_{i}'] = coeff
+						temp.loc[tstep, 'mfcc_dur'] = mfcc_object.duration
+
+					phone_list.append(temp)
 			else:
 				continue
 	## Skip files that can't be found
@@ -93,5 +105,6 @@ for count, audio in enumerate(set(df.TalkID)):
 		pass
 
 ## Write to CSV
-df.to_csv(args.outputCSV, encoding = "UTF-16")
+outdf = pd.concat(phone_list, ignore_index=True)
+outdf.to_csv(args.outputCSV, encoding = "UTF-16")
 print("Done!")
